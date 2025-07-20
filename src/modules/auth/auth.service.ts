@@ -1,26 +1,89 @@
-import { Injectable } from '@nestjs/common';
-import { CreateAuthDto } from './dto/create-auth.dto';
-import { UpdateAuthDto } from './dto/update-auth.dto';
+import {
+	UnauthorizedException,
+	Injectable,
+	InternalServerErrorException,
+} from "@nestjs/common";
+import { AuthLoginDto } from "./dto/authLogin.dto";
+import { UsersService } from "../users/users.service";
+import { JwtService } from "@nestjs/jwt";
+import { CreateUserDto } from "../users/dto/create-user.dto";
+import { comparePasswords } from "src/utils/password";
+import { Payload } from "./types/jwt-payload";
+import { Response } from "express";
 
 @Injectable()
 export class AuthService {
-  create(createAuthDto: CreateAuthDto) {
-    return 'This action adds a new auth';
-  }
+	constructor(
+		private readonly userService: UsersService,
+		private readonly jwtService: JwtService,
+	) {}
 
-  findAll() {
-    return `This action returns all auth`;
-  }
+	async register(dto: CreateUserDto) {
+		try {
+			const res = await this.userService.create(dto);
+			return res;
+		} catch (err) {
+			throw new InternalServerErrorException(`Cannot register user ${err}`);
+		}
+	}
 
-  findOne(id: number) {
-    return `This action returns a #${id} auth`;
-  }
+	async login(dto: AuthLoginDto, res: Response) {
+		const { email, password } = dto;
+		try {
+			const user = await this.userService.findByEmail(email);
+			if (!user) {
+				throw new UnauthorizedException("Invalid credentials");
+			}
+			const matched = await comparePasswords(user.password, password);
+			if (!matched) {
+				throw new UnauthorizedException("Invalid credentials");
+			}
+			const payload: Payload = { sub: user.id, email: user.email };
+			const { accessToken, refreshToken } = await this.generateTokens(payload);
 
-  update(id: number, updateAuthDto: UpdateAuthDto) {
-    return `This action updates a #${id} auth`;
-  }
+			res.cookie("refreshToken", refreshToken, {
+				httpOnly: true,
+				secure: true,
+				sameSite: "strict",
+				maxAge: 1000 * 60 * 60 * 24 * 7,
+			});
 
-  remove(id: number) {
-    return `This action removes a #${id} auth`;
-  }
+			return res.json({ accessToken });
+		} catch (err) {
+			throw new InternalServerErrorException(`Cannot login user ${err}`);
+		}
+	}
+
+	private async generateTokens(payload: Payload) {
+		const accessToken = await this.jwtService.signAsync(payload, {
+			secret: process.env.JWT_ACCESS_SECRET,
+			expiresIn: process.env.JWT_ACCESS_EXPIRES_IN,
+		});
+
+		const refreshToken = await this.jwtService.signAsync(payload, {
+			secret: process.env.JWT_REFRESH_SECRET,
+			expiresIn: process.env.JWT_REFRESH_EXPIRES_IN,
+		});
+
+		return { accessToken, refreshToken };
+	}
+
+	async refresh(refreshToken: string) {
+		try {
+			const payload: Payload = await this.jwtService.verifyAsync(refreshToken, {
+				secret: process.env.JWT_REFRESH_SECRET,
+			});
+			const user = await this.userService.findOne(payload.sub);
+			if (!user) throw new UnauthorizedException("Invalid refresh token");
+
+			const newAccessToken = await this.jwtService.signAsync(payload, {
+				secret: process.env.JWT_ACCESS_SECRET,
+				expiresIn: process.env.JWT_ACCESS_EXPIRES_IN,
+			});
+
+			return { accessToken: newAccessToken };
+		} catch (err) {
+			throw new UnauthorizedException("Invalid refresh token");
+		}
+	}
 }
