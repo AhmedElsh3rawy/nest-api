@@ -1,34 +1,38 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { CreateAuthDto } from './dto/create-auth.dto';
-import { UpdateAuthDto } from './dto/update-auth.dto';
+import {
+	Res,
+	Req,
+	Controller,
+	Get,
+	Post,
+	Body,
+	Patch,
+	Param,
+	Delete,
+	UnauthorizedException,
+} from "@nestjs/common";
+import { AuthService } from "./auth.service";
+import { CreateUserDto } from "../users/dto/create-user.dto";
+import { AuthLoginDto } from "./dto/authLogin.dto";
+import { Response, Request } from "express";
 
-@Controller('auth')
+@Controller("auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+	constructor(private readonly authService: AuthService) {}
 
-  @Post()
-  create(@Body() createAuthDto: CreateAuthDto) {
-    return this.authService.create(createAuthDto);
-  }
+	@Post("register")
+	create(@Body() dto: CreateUserDto) {
+		return this.authService.register(dto);
+	}
 
-  @Get()
-  findAll() {
-    return this.authService.findAll();
-  }
+	@Post("login")
+	logint(@Res() res: Response, @Body() dto: AuthLoginDto) {
+		return this.authService.login(dto, res);
+	}
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.authService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateAuthDto: UpdateAuthDto) {
-    return this.authService.update(+id, updateAuthDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.authService.remove(+id);
-  }
+	@Post("refresh")
+	refresh(@Req() req: Request) {
+		const refreshToken: string = req.cookies["refreshToken"];
+		if (!refreshToken) throw new UnauthorizedException("Missing refresh token");
+		return this.authService.refresh(refreshToken);
+	}
 }
