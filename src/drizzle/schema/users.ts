@@ -1,3 +1,4 @@
+import { InferModel } from "drizzle-orm";
 import { pgTable, serial, primaryKey, text } from "drizzle-orm/pg-core";
 
 export const usersTable = pgTable("users", {
@@ -6,3 +7,5 @@ export const usersTable = pgTable("users", {
 	email: text("email").unique().notNull(),
 	password: text("password").notNull(),
 });
+
+export type User = InferModel<typeof usersTable>;
