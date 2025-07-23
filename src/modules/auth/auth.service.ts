@@ -2,6 +2,7 @@ import {
 	UnauthorizedException,
 	Injectable,
 	InternalServerErrorException,
+	NotFoundException,
 } from "@nestjs/common";
 import { AuthLoginDto } from "./dto/authLogin.dto";
 import { UsersService } from "../users/users.service";
@@ -10,6 +11,7 @@ import { CreateUserDto } from "../users/dto/create-user.dto";
 import { comparePasswords } from "src/utils/password";
 import { Payload } from "./types/jwt-payload";
 import { Response } from "express";
+import { User } from "../../drizzle/schema";
 
 @Injectable()
 export class AuthService {
@@ -27,17 +29,8 @@ export class AuthService {
 		}
 	}
 
-	async login(dto: AuthLoginDto, res: Response) {
-		const { email, password } = dto;
+	async login(user: User, res: Response) {
 		try {
-			const user = await this.userService.findByEmail(email);
-			if (!user) {
-				throw new UnauthorizedException("Invalid credentials");
-			}
-			const matched = await comparePasswords(user.password, password);
-			if (!matched) {
-				throw new UnauthorizedException("Invalid credentials");
-			}
 			const payload: Payload = { sub: user.id, email: user.email };
 			const { accessToken, refreshToken } = await this.generateTokens(payload);
 
@@ -66,6 +59,26 @@ export class AuthService {
 		});
 
 		return { accessToken, refreshToken };
+	}
+
+	async validateLocalUser(email: string, password: string) {
+		try {
+			const user = await this.userService.findByEmail(email);
+			if (!user) throw new UnauthorizedException("Invalid credentials");
+			const matched = await comparePasswords(user.password, password);
+			if (!matched) throw new UnauthorizedException("Invalid credentials.");
+			return user;
+		} catch (err) {
+			throw new InternalServerErrorException(
+				`Cannot validate this user ${err}`,
+			);
+		}
+	}
+
+	async validateJwtUser(id: number) {
+		const res = await this.userService.findOne(id);
+		if (!res) throw new UnauthorizedException("User not found.");
+		return res;
 	}
 
 	async refresh(refreshToken: string) {
