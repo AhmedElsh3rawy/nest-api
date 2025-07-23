@@ -1,4 +1,5 @@
 import {
+	Req,
 	Controller,
 	Get,
 	Post,
@@ -6,10 +7,15 @@ import {
 	Patch,
 	Param,
 	Delete,
+	UseGuards,
 } from "@nestjs/common";
 import { UsersService } from "./users.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
+import { JwtAuthGuard } from "../auth/guards/jwt.guard";
+import { AuthGuard } from "@nestjs/passport";
+import { CurrentUser } from "../auth/current-user.decorator";
+import { User } from "src/drizzle/schema";
 
 @Controller("users")
 export class UsersController {
@@ -38,5 +44,11 @@ export class UsersController {
 	@Delete(":id")
 	remove(@Param("id") id: string) {
 		return this.usersService.remove(+id);
+	}
+
+	@UseGuards(AuthGuard("jwt"))
+	@Get("/profile")
+	getProfile(@CurrentUser() user: User) {
+		return user;
 	}
 }
