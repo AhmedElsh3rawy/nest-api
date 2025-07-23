@@ -9,11 +9,15 @@ import {
 	Param,
 	Delete,
 	UnauthorizedException,
+	UseGuards,
 } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { CreateUserDto } from "../users/dto/create-user.dto";
 import { AuthLoginDto } from "./dto/authLogin.dto";
-import { Response, Request } from "express";
+import type { Response, Request } from "express";
+import { LocalAuthGuard } from "./guards/local.guard";
+import { CurrentUser } from "./current-user.decorator";
+import { User } from "../../drizzle/schema";
 
 @Controller("auth")
 export class AuthController {
@@ -25,8 +29,9 @@ export class AuthController {
 	}
 
 	@Post("login")
-	logint(@Res() res: Response, @Body() dto: AuthLoginDto) {
-		return this.authService.login(dto, res);
+	@UseGuards(LocalAuthGuard)
+	logint(@CurrentUser() user: User, @Res() res: Response) {
+		return this.authService.login(user, res);
 	}
 
 	@Post("refresh")
